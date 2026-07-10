@@ -16,12 +16,64 @@ def list_asm_integrations(headers, tenant_id, params=None):
 
     response = requests.get(f"{Base_URL}" + "collector/v1/" + tenant_id + "/integrations", headers=headers, params=params)
     print(response.status_code)
-    print(response.headers)
+    #print(response.headers)
     # print(response.text)
     response.raise_for_status()
     return response.json()
 
 
+def get_active_integrations(headers, tenant_id, params=None):
+    all_tenant_integrations = list_asm_integrations(headers=headers, tenant_id=tenant_id, params=params)
+    tenant_integration_dict_list = all_tenant_integrations.get("data")
+    configured_integrations_list = {}
+    not_configured_integration_list = {}
+
+    for integration in tenant_integration_dict_list:
+        integration_out_dict = {}
+        enabled = integration["attributes"].get("enabled")
+        name = integration["attributes"].get("title")
+        configured = integration["meta"].get("configured")
+        description = integration["attributes"].get("description")
+        integration_id = integration["attributes"].get("id")
+        integration_out_dict["name"] = name
+        integration_out_dict["description"] = description
+        if configured > 0:
+            config_report = integration["meta"].get("configuration_reports")
+            recent_conf_report = config_report[0]
+            conf_report_attributes = recent_conf_report.get("attributes")
+
+            health_report = integration["meta"].get("health_report")
+            health_rep_attrib = health_report.get("attributes")
+
+            status_list = conf_report_attributes.get("status")
+            state = health_rep_attrib.get("state")
+            last_seen = integration["meta"].get("last_seen_at")
+            healthy = False
+
+            integration_out_dict["status_list"] = status_list
+            integration_out_dict["state"] = state
+            integration_out_dict["last_seen"] = last_seen
+
+            for status in status_list:
+                if status == "Healthy":
+                    healthy = True
+
+            if state and healthy:
+                healthy = True
+
+            integration_out_dict["healthy"] = healthy
+            configured_integrations_list[integration_id] = integration_out_dict
+
+        if configured == 0:
+            not_configured_integration_list[integration_id] = integration_out_dict
+
+    tenant_configuration_stats_dict = {}
+    tenant_configuration_stats_dict["configured_integrations_list"] = configured_integrations_list
+    tenant_configuration_stats_dict["not_configured_integration_list"] = not_configured_integration_list
+    return tenant_configuration_stats_dict
+
+
+# forbiden? receive "you probably should not be here" message
 def list_asm_organizations(headers, params=None):
     if params is None:
         params = {"page": 1, "per_page": 100}
@@ -40,8 +92,8 @@ def list_asm_tenants(headers, params=None):
         params = {"page": 1, "size": 300}
 
     response = requests.get(f"{Base_URL}" + "tenant-management/tenants", headers=headers, params=params)
-    print(response.status_code)
-    print(response.headers)
+    #print(response.status_code)
+    #print(response.headers)
     # print(response.text)
     response.raise_for_status()
 
