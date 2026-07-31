@@ -5,6 +5,7 @@ import requests
 from requests.auth import HTTPBasicAuth
 import subprocess
 import get_1password_field
+import os
 from openpyxl import Workbook
 
 Base_URL = "https://platform.sedaraapis.com/"
@@ -30,6 +31,8 @@ def get_active_integrations(headers, tenant_id, params=None):
     not_configured_integration_list = {}
 
     for integration in tenant_integration_dict_list:
+        status_list = []
+        state = False
         integration_out_dict = {}
         enabled = integration["attributes"].get("enabled")
         name = integration["attributes"].get("title")
@@ -40,14 +43,28 @@ def get_active_integrations(headers, tenant_id, params=None):
         integration_out_dict["description"] = description
         if configured > 0:
             config_report = integration["meta"].get("configuration_reports")
-            recent_conf_report = config_report[0]
-            conf_report_attributes = recent_conf_report.get("attributes")
-
             health_report = integration["meta"].get("health_report")
-            health_rep_attrib = health_report.get("attributes")
 
-            status_list = conf_report_attributes.get("status")
-            state = health_rep_attrib.get("state")
+            try:
+                recent_conf_report = config_report[0]
+                conf_report_attributes = recent_conf_report.get("attributes")
+                status_list = conf_report_attributes.get("status")
+
+            except:
+                print("Name:  ", name, "     Configured:  ", configured)
+                print("Config Reports: ", config_report)
+                print(tenant_id)
+
+            try:
+                health_report = integration["meta"].get("health_report")
+                health_rep_attrib = health_report.get("attributes")
+                state = health_rep_attrib.get("state")
+
+            except:
+                print("Name:  ", name, "     Configured:  ", configured)
+                print("Health Reports: ", health_report)
+                print(tenant_id)
+
             last_seen = integration["meta"].get("last_seen_at")
             healthy = False
 
@@ -165,6 +182,8 @@ def out_to_excel(data, xl_save_path):
                 row += 1
 
     wb.save(xl_save_path)
+    directory, filename = os.path.split(xl_save_path)
+    print("File:  ", filename, "  Saved To Directory:  ", directory)
 
 
 def get_base_url():

@@ -28,12 +28,10 @@ if __name__ == "__main__":
     xl_save_path = path + str(date.today()) + "ASM_Integrations_Health_Report.xlsx"
     Fullpath = path + "_ASM_all_integrations_all_tenants.json"
 
-    try:
-        Useful_ASM_functions.out_to_excel(data=data, xl_save_path=xl_save_path)
 
-    except:
-        xl_save_path_2 = path + str(datetime.now().strftime("%Y-%-m-%-d_%H-%M")) + "_ASM_Integrations_Health_Report.xlsx"
-        Useful_ASM_functions.out_to_excel(data=data, xl_save_path=xl_save_path_2)
+    xl_save_path_2 = path + str(datetime.now().strftime("%Y-%m-%d_%H-%M")) + "_ASM_Integrations_Health_Report.xlsx"
+
+    Useful_ASM_functions.out_to_excel(data=data, xl_save_path=xl_save_path_2)
 
     f = open(Fullpath, "w")
     sys.stdout = f
