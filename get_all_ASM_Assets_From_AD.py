@@ -89,8 +89,8 @@ if __name__ == "__main__":
     kind = '(class:Active-Directory-Computer OR class:Active-Directory-Group OR class:Active-Directory-User)include_stale:true include_hidden:true include_missing:true include_suppressed_by_age:true include_deleted:true'
 
     assets = get_all_assets(BASE_URL, tenant_id, headers, kind)
-    fullpath_ou_json = path + "ASM_West_Herr_OU_Structure.json"
-    fullpath_ou_csv = path + "ASM_West_Herr_OU_Structure.csv"
+    fullpath_ou_json = path + "ASM_West_Herr_OU_Structure_v2.json"
+    fullpath_ou_csv = path + "ASM_West_Herr_OU_Structure_v2.csv"
     tree, rows = export_ou_structure(
             assets,
             json_output_path=fullpath_ou_json,

@@ -16,6 +16,7 @@ AD_RECORD_PATHS = {
     "Device": ("device", "active_directory_computer"),
 }
 
+
 def _get_asset_list(document):
     if isinstance(document, list):
         assets = document
@@ -244,13 +245,69 @@ def build_ou_structure(
     return tree, flat_rows
 
 
+def build_hierarchy_csv_rows(
+        asset_rows: Iterable[dict[str, Any]],
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """Aggregate assets by path and format dynamic leaf-to-root columns."""
+    aggregates: dict[tuple[str, ...], dict[str, Any]] = {}
+
+    for asset in asset_rows:
+        components = [
+            value
+            for key, value in _dn_components(str(asset["distinguished_name"]))
+            if key in {"OU", "DC"}
+        ]
+        if not components:
+            continue
+
+        path_key = tuple(component.casefold() for component in components)
+        aggregate = aggregates.setdefault(
+            path_key,
+            {
+                "components": components,
+                "computer_count": 0,
+                "user_count": 0,
+            },
+        )
+        if asset["asset_type"] == "Computer":
+            aggregate["computer_count"] += 1
+        elif asset["asset_type"] == "User":
+            aggregate["user_count"] += 1
+
+    maximum_depth = max(
+        (len(item["components"]) for item in aggregates.values()), default=0
+    )
+    hierarchy_fields = [
+        f"hierarchy_level_{level}"
+        for level in range(maximum_depth, 0, -1)
+    ]
+    fieldnames = [*hierarchy_fields, "computer_count", "user_count"]
+    csv_rows: list[dict[str, Any]] = []
+
+    for aggregate in aggregates.values():
+        components = aggregate["components"]
+        padded_components = [""] * (maximum_depth - len(components)) + components
+        row = dict(zip(hierarchy_fields, padded_components))
+        row["computer_count"] = aggregate["computer_count"]
+        row["user_count"] = aggregate["user_count"]
+        csv_rows.append(row)
+
+    csv_rows.sort(
+        key=lambda row: tuple(
+            str(row[field]).casefold() for field in reversed(hierarchy_fields)
+        )
+    )
+    return fieldnames, csv_rows
+
+
 def export_ou_structure(
         asset_data,
         json_output_path="ou_structure.json",
         csv_output_path="ou_structure.csv",
 ) -> tuple[dict, list]:
     """Read assets from JSON and write nested JSON plus flattened CSV outputs."""
-    tree, rows = build_ou_structure(_get_asset_list(asset_data))
+    tree, asset_rows = build_ou_structure(_get_asset_list(asset_data))
+    fieldnames, csv_rows = build_hierarchy_csv_rows(asset_rows)
 
     json_path = Path(json_output_path)
     csv_path = Path(csv_output_path)
@@ -260,21 +317,12 @@ def export_ou_structure(
     with json_path.open("w", encoding="utf-8") as destination:
         json.dump(tree, destination, indent=2, ensure_ascii=False)
 
-    fieldnames = [
-        "domain",
-        "ou_path",
-        "ou_depth",
-        "asset_type",
-        "asset_name",
-        "object_category",
-        "distinguished_name",
-    ]
     with csv_path.open("w", encoding="utf-8-sig", newline="") as destination:
         writer = csv.DictWriter(destination, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(csv_rows)
 
-    return tree, rows
+    return tree, csv_rows
 
 
 def main() -> None:
