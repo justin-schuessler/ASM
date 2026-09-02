@@ -80,15 +80,50 @@ if __name__ == "__main__":
     path = "C:/Users/justin.schuessler/Documents/API_Output/Sedara_ASM/"
     BASE_URL = "https://platform.sedaraapis.com/asm/"
 
-    # tenant_id = get_1password_field.get_1password_field("Sedara Platform ASM API", "sedara tenant id", "API")
+    # Usage:
+    #   python get_all_ASM_Assets_From_AD.py
+    #   python get_all_ASM_Assets_From_AD.py --assets saved_assets.json
+    #   python get_all_ASM_Assets_From_AD.py saved_assets.json
+    arguments = sys.argv[1:]
+    if arguments[:1] == ["--assets"]:
+        if len(arguments) != 2:
+            raise SystemExit(
+                "Usage: python get_all_ASM_Assets_From_AD.py --assets JSON_FILE"
+            )
+        arguments = arguments[1:]
+    elif len(arguments) > 1:
+        raise SystemExit(
+            "Usage: python get_all_ASM_Assets_From_AD.py [--assets JSON_FILE]"
+        )
 
-    # west herr
-    tenant_id = "ca25595c-c6f0-4c58-9e9b-c83325eb9cc6"
-    access_key = get_1password_field.get_1password_field("Sedara Platform ASM API", "Access key", "API")
-    headers = {"Authorization":  f"Bearer {access_key}", "Content-Type": "application/json"}
-    kind = '(class:Active-Directory-Computer OR class:Active-Directory-Group OR class:Active-Directory-User)include_stale:true include_hidden:true include_missing:true include_suppressed_by_age:true include_deleted:true'
+    loaded_from_file = bool(arguments)
+    if loaded_from_file:
+        assets_path = Path(arguments[0])
+        with assets_path.open(encoding="utf-8-sig") as source:
+            saved_data = json.load(source)
 
-    assets = get_all_assets(BASE_URL, tenant_id, headers, kind)
+        if isinstance(saved_data, list):
+            assets = saved_data
+        elif isinstance(saved_data, dict):
+            assets = saved_data.get("assets", saved_data.get("data"))
+        else:
+            assets = None
+
+        if not isinstance(assets, list):
+            raise ValueError(
+                "Saved JSON must be an asset list or contain an 'assets' list"
+            )
+        print(f"Loaded {len(assets)} assets from {assets_path}")
+    else:
+        # tenant_id = get_1password_field.get_1password_field("Sedara Platform ASM API", "sedara tenant id", "API")
+
+        # west herr
+        tenant_id = "ca25595c-c6f0-4c58-9e9b-c83325eb9cc6"
+        access_key = get_1password_field.get_1password_field("Sedara Platform ASM API", "Access key", "API")
+        headers = {"Authorization":  f"Bearer {access_key}", "Content-Type": "application/json"}
+        kind = '(class:Active-Directory-Computer OR class:Active-Directory-Group OR class:Active-Directory-User)include_stale:true include_hidden:true include_missing:true include_suppressed_by_age:true include_deleted:true'
+        assets = get_all_assets(BASE_URL, tenant_id, headers, kind)
+
     fullpath_ou_json = path + "ASM_West_Herr_OU_Structure_v2.json"
     fullpath_ou_csv = path + "ASM_West_Herr_OU_Structure_v2.csv"
     tree, rows = export_ou_structure(
@@ -97,6 +132,7 @@ if __name__ == "__main__":
             csv_output_path=fullpath_ou_csv,
         )
 
-    Fullpath_assets = path + "ASM_west_herr_AD_all_Classes_1.json"
-    save_assets(assets, Fullpath_assets)
-    print(f"Saved {len(assets)}  ", Fullpath_assets)
+    if not loaded_from_file:
+        Fullpath_assets = path + "ASM_west_herr_AD_all_Classes_1.json"
+        save_assets(assets, Fullpath_assets)
+        print(f"Saved {len(assets)}  ", Fullpath_assets)

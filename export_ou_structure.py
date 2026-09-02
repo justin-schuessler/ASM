@@ -316,11 +316,13 @@ def export_ou_structure(
 
     with json_path.open("w", encoding="utf-8") as destination:
         json.dump(tree, destination, indent=2, ensure_ascii=False)
+        print("Saved     ", json_output_path)
 
     with csv_path.open("w", encoding="utf-8-sig", newline="") as destination:
         writer = csv.DictWriter(destination, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(csv_rows)
+        print(f"Saved    ", csv_output_path)
 
     return tree, csv_rows
 
