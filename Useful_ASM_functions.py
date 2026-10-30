@@ -2,14 +2,22 @@ import sys
 import json
 import datetime
 import requests
+import time
 from requests.auth import HTTPBasicAuth
 import subprocess
 import get_1password_field
 import os
 from openpyxl import Workbook
+from collections import Counter
 
 Base_URL = "https://platform.sedaraapis.com/"
 asm_out_path = "C:/Users/justin.schuessler/Documents/API_Output/Sedara_ASM/"
+asm_report_path = "A:/Cyber_Operations/ASM_Reports/"
+
+
+def clean_class(nested):
+    clean = nested.lower().replace("-", "_")
+    return clean
 
 
 def list_asm_integrations(headers, tenant_id, params=None):
@@ -194,5 +202,229 @@ def get_asm_out_path():
     return asm_out_path
 
 
+def get_asm_report_out_path():
+    return asm_report_path
+
+
 def get_asm_platform_api_access_key():
     return get_1password_field.get_1password_field("Sedara Platform ASM API", "Access key", "API")
+
+
+def get_software_vuln_data(tenant, headers, params=None):
+    if params is None:
+        params = {"include_cves": "true"}
+
+    response = requests.get(f"{Base_URL}" + f"asm/{tenant}/tech-stack", headers=headers, params=params)
+    print(response.status_code)
+    print(response.headers)
+    # print(response.text)
+    response.raise_for_status()
+
+    return response.json()
+
+
+def get_all_assets_from_fql(base: str, headers: dict[str, str], jsonz: dict, timeout: float = 60,) -> list[dict]:
+    """Fetch and aggregate every page of assets."""
+    """Used to Return a Large list of assets with multiple Pages"""
+    payload = {**jsonz, "page": 0}
+    limit = payload.setdefault("limit", 1000)
+
+    if type(limit) is not int or limit <= 0:
+        raise ValueError("'limit' must be a positive integer.")
+
+    with requests.Session() as session:
+
+        def fetch_page(page: int) -> dict:
+            response = session.post(
+                base,
+                headers=headers,
+                json={**payload, "page": page},
+                timeout=timeout,
+            )
+            response.raise_for_status()
+            #print(response.status_code)
+            result = response.json()
+
+            if not isinstance(result.get("data"), list):
+                raise ValueError(f"Page {page}: expected an 'assets' list.")
+
+            if result.get("page") != page:
+                raise ValueError(
+                    f"Requested page {page}, but API returned page "
+                    f"{result.get('page')!r}."
+                )
+            return result
+
+        first_page = fetch_page(1)
+        total = first_page.get("total")
+
+        if type(total) is not int or total < 0:
+            raise ValueError("'total' must be a non-negative integer.")
+
+        page_count = (total + limit - 1) // limit
+        assets = list(first_page["data"])
+
+        for page in range(2, page_count + 1):
+            result = fetch_page(page)
+
+            print(
+                f"Requested page={page}, "
+                f"returned page={result.get('page')}, "
+                f"present={result.get('present')}, "
+                f"total={result.get('total')}, "
+                f"received={len(result['data'])}"
+            )
+
+            if result["data"] == first_page["data"]:
+                raise ValueError(
+                    f"Page {page} contains the same assets as page 0. "
+                    "The API is repeating the first page."
+                )
+
+            assets.extend(result["data"])
+    if len(assets) != total:
+        raise ValueError(
+            f"Expected {total} assets, but received {len(assets)}."
+        )
+
+    return assets
+
+
+# Takes a list of values and fql expression and returns aggregated list of all queries for it agaisnt given endpoint
+def aggregate_assets_from_values_list(values: list[str], headers: dict[str, str], base_url: str, filter_expression: str,
+    includes: str= (
+        "include_stale:true "
+        "include_hidden:true "
+        "include_missing:true "
+        "include_suppressed_by_age:true "
+        "include_deleted:true"
+    ),
+    limit: int = 100,
+    timeout: float = 60,
+) -> list[dict]:
+    if "{value}" not in filter_expression:
+        raise ValueError("filter_expression must contain '{value}'.")
+    if type(limit) is not int or limit <= 0:
+        raise ValueError("limit must be a positive integer.")
+    # Remove duplicates while preserving input order.
+    unique_values = list(dict.fromkeys(values))
+    aggregated = []
+    missing = []
+
+    def fetch_page(fql: str, page: int) -> dict:
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            response = requests.post(base_url, headers=headers, json={"fql": fql, "page": page, "limit": limit})
+            #print("JSON: \n", response.json())
+            #print("TEXT: \n", response.text)
+            #print("URL: \n", response.url)
+            database_locked = (
+                    response.status_code == 500
+                    and "SQLITE_BUSY" in response.text
+            )
+            if database_locked and attempt < max_attempts - 1:
+                delay = 2 ** (attempt + 1)
+                print(
+                    f"Database locked on page {page}. "
+                    f"Retrying in {delay} seconds "
+                    f"(attempt {attempt + 2}/{max_attempts})..."
+                )
+                time.sleep(delay)
+                continue
+            if not response.ok:
+                raise requests.HTTPError(
+                    f"HTTP {response.status_code}\n"
+                    f"Filter: {fql}\n"
+                    f"Response: {response.text[:2000]}",
+                    response=response,
+                )
+            body = response.json()
+            if not isinstance(body.get("data"), list):
+                raise ValueError(
+                    f"Page {page}: response must contain a 'data' list."
+                )
+            return body
+    for value in unique_values:
+        fql = (
+            f"{filter_expression.replace('{value}', value)} "
+            f"{includes}"
+        ).strip()
+        #print(fql)
+        first_page = fetch_page(fql, 1)
+        query_results = list(first_page["data"])
+        if not query_results:
+            missing.append(value)
+            print(f"ERROR: No data returned for {value!r}")
+            continue
+        total = first_page.get("total")
+        if type(total) is not int or total < 0:
+            raise ValueError(
+                f"{value!r}: response must contain a valid 'total'."
+            )
+        page_count = (total + limit - 1) // limit
+        for page in range(2, page_count + 1):
+            query_results.extend(fetch_page(fql, page)["data"])
+        if len(query_results) != total:
+            raise ValueError(
+                f"{value!r}: expected {total} records, "
+                f"received {len(query_results)}."
+            )
+        if len(query_results) > 1:
+            print(
+                f"WARNING: {value!r} returned "
+                f"{len(query_results)} records; expected one."
+            )
+            for q in query_results:
+                print("TITLE:  ",q.get("title"))
+                print("UID:  ", q.get("uid"))
+        aggregated.extend(query_results)
+    input_titles = set(unique_values)
+    output_counts = Counter(
+        record.get("title")
+        for record in aggregated
+        if isinstance(record.get("title"), str)
+    )
+    print(
+        f"Inputs: {len(values)} | "
+        f"Unique inputs: {len(unique_values)} | "
+        f"Output records: {len(aggregated)}"
+    )
+    if len(aggregated) != len(unique_values):
+        print(
+            "WARNING: Input/output count mismatch: "
+            f"{len(unique_values)} unique inputs versus "
+            f"{len(aggregated)} output records."
+        )
+    duplicates = {
+        title: count
+        for title, count in output_counts.items()
+        if count > 1
+    }
+    unexpected = set(output_counts) - input_titles
+    missing_titles = input_titles - set(output_counts)
+    if duplicates:
+        print("\nDuplicate output titles:")
+        for title, count in sorted(duplicates.items()):
+            print(f"  - {title!r}: {count} records ({count - 1} extra)")
+    if unexpected:
+        print("\nOutput titles not in the input list:")
+        for title in sorted(unexpected):
+            print(f"  - {title!r}: {output_counts[title]} records")
+    if missing_titles:
+        print("\nInput titles missing from the output:")
+        for title in sorted(missing_titles):
+            print(f"  - {title!r}")
+    for index, record in enumerate(aggregated):
+        if not isinstance(record.get("title"), str):
+            print(
+                f"WARNING: Output record at index {index} "
+                f"has a missing or non-string title: {record!r}"
+            )
+    return aggregated
+
+
+def split_by_flags_active_other(all_groups: list[dict]) -> tuple[list[dict], list[dict]]:
+    return
+
+
+

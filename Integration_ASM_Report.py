@@ -9,6 +9,7 @@ import get_1password_field
 import Useful_ASM_functions
 
 if __name__ == "__main__":
+    args = sys.argv
     original_stdout = sys.stdout
 
     access_key = Useful_ASM_functions.get_asm_platform_api_access_key()
@@ -25,9 +26,13 @@ if __name__ == "__main__":
 
     data = all_integrations
     path = Useful_ASM_functions.get_asm_out_path()
+    if len(args) >= 2:
+        directory = args[1]
+        if directory == "network" or directory == "NETWORK":
+            path = Useful_ASM_functions.get_asm_report_out_path()
+
     xl_save_path = path + str(date.today()) + "ASM_Integrations_Health_Report.xlsx"
     Fullpath = path + "_ASM_all_integrations_all_tenants.json"
-
 
     xl_save_path_2 = path + str(datetime.now().strftime("%Y-%m-%d_%H-%M")) + "_ASM_Integrations_Health_Report.xlsx"
 
