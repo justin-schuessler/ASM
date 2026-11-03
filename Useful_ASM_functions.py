@@ -9,24 +9,34 @@ import get_1password_field
 import os
 from openpyxl import Workbook
 from collections import Counter
+from collections import defaultdict
+
 
 Base_URL = "https://platform.sedaraapis.com/"
 asm_out_path = "C:/Users/justin.schuessler/Documents/API_Output/Sedara_ASM/"
 asm_report_path = "A:/Cyber_Operations/ASM_Reports/"
 
 
+# changes nested classes string to dict key string
 def clean_class(nested):
     clean = nested.lower().replace("-", "_")
     return clean
 
 
+# changes _group at end of classes to _user
+def group_to_user(value: str) -> str:
+    return value[:-6] + "_user" if value.endswith("_group") else value
+
+
 def list_asm_integrations(headers, tenant_id, params=None):
     if params is None:
-        params = {"page": 1, "limit": 100, "pretty": "true", "include_health_report": "true", "include_configuration_report": "true", "include_disabled": "true"}
+        params = {"page": 1, "limit": 100, "pretty": "true", "include_health_report": "true",
+                  "include_configuration_report": "true", "include_disabled": "true"}
 
-    response = requests.get(f"{Base_URL}" + "collector/v1/" + tenant_id + "/integrations", headers=headers, params=params)
+    response = requests.get(f"{Base_URL}" + "collector/v1/" + tenant_id + "/integrations", headers=headers,
+                            params=params)
     print(response.status_code)
-    #print(response.headers)
+    # print(response.headers)
     # print(response.text)
     response.raise_for_status()
     return response.json()
@@ -118,8 +128,8 @@ def list_asm_tenants(headers, params=None):
         params = {"page": 1, "size": 300}
 
     response = requests.get(f"{Base_URL}" + "tenant-management/tenants", headers=headers, params=params)
-    #print(response.status_code)
-    #print(response.headers)
+    # print(response.status_code)
+    # print(response.headers)
     # print(response.text)
     response.raise_for_status()
 
@@ -130,7 +140,8 @@ def display_tenants(headers, params=None):
     tenants_return = list_asm_tenants(headers, params)
     tenants_list = tenants_return.get("tenants")
     for t in tenants_list:
-        print(f"Name:{t['attributes'].get('name')}  |Hidden: {t['attributes'].get('hidden')}  |Type: {t['attributes'].get('type')}  |Kind: {t.get('kind')}  |ID: {t.get('id')} ")
+        print(
+            f"Name:{t['attributes'].get('name')}  |Hidden: {t['attributes'].get('hidden')}  |Type: {t['attributes'].get('type')}  |Kind: {t.get('kind')}  |ID: {t.get('id')} ")
     return tenants_list
 
 
@@ -139,7 +150,8 @@ def get_active_tenants(headers, params=None):
     tenants_list = tenants_return.get("tenants")
     active_tenants = {}
     for t in tenants_list:
-        if not (t['attributes'].get('hidden')) and t['attributes'].get('type') == "CUSTOMER" and t.get('kind') == "platform_TENANT":
+        if not (t['attributes'].get('hidden')) and t['attributes'].get('type') == "CUSTOMER" and t.get(
+                'kind') == "platform_TENANT":
             active_tenants[t.get('id')] = t['attributes'].get('name')
 
     return active_tenants
@@ -180,13 +192,18 @@ def out_to_excel(data, xl_save_path):
             for configed_integration in data[key].get("configured_integrations_list").keys():
                 ws.cell(row=row, column=1).value = key
                 ws.cell(row=row, column=2).value = data[key].get("name")
-                ws.cell(row=row, column=3).value = data[key]["configured_integrations_list"][configed_integration].get("name")
+                ws.cell(row=row, column=3).value = data[key]["configured_integrations_list"][configed_integration].get(
+                    "name")
                 ws.cell(row=row, column=4).value = configed_integration
-                ws.cell(row=row, column=5).value = data[key]["configured_integrations_list"][configed_integration].get("healthy")
-                ws.cell(row=row, column=6).value = data[key]["configured_integrations_list"][configed_integration].get("state")
-                status_string = ", ".join(data[key]["configured_integrations_list"][configed_integration].get("status_list"))
+                ws.cell(row=row, column=5).value = data[key]["configured_integrations_list"][configed_integration].get(
+                    "healthy")
+                ws.cell(row=row, column=6).value = data[key]["configured_integrations_list"][configed_integration].get(
+                    "state")
+                status_string = ", ".join(
+                    data[key]["configured_integrations_list"][configed_integration].get("status_list"))
                 ws.cell(row=row, column=7).value = status_string
-                ws.cell(row=row, column=8).value = data[key]["configured_integrations_list"][configed_integration].get("last_seen")
+                ws.cell(row=row, column=8).value = data[key]["configured_integrations_list"][configed_integration].get(
+                    "last_seen")
                 row += 1
 
     wb.save(xl_save_path)
@@ -223,7 +240,8 @@ def get_software_vuln_data(tenant, headers, params=None):
     return response.json()
 
 
-def get_all_assets_from_fql(base: str, headers: dict[str, str], jsonz: dict, timeout: float = 60,) -> list[dict]:
+def get_all_assets_from_fql(base: str, headers: dict[str, str],
+                            jsonz: dict, timeout: float = 60, ) -> list[dict]:
     """Fetch and aggregate every page of assets."""
     """Used to Return a Large list of assets with multiple Pages"""
     payload = {**jsonz, "page": 0}
@@ -242,7 +260,7 @@ def get_all_assets_from_fql(base: str, headers: dict[str, str], jsonz: dict, tim
                 timeout=timeout,
             )
             response.raise_for_status()
-            #print(response.status_code)
+            # print(response.status_code)
             result = response.json()
 
             if not isinstance(result.get("data"), list):
@@ -257,6 +275,13 @@ def get_all_assets_from_fql(base: str, headers: dict[str, str], jsonz: dict, tim
 
         first_page = fetch_page(1)
         total = first_page.get("total")
+        print(
+            f"Requested page={1}, "
+            f"returned page={first_page.get('page')}, "
+            f"present={first_page.get('present')}, "
+            f"total={first_page.get('total')}, "
+            f"received={len(first_page['data'])}"
+        )
 
         if type(total) is not int or total < 0:
             raise ValueError("'total' must be a non-negative integer.")
@@ -290,18 +315,20 @@ def get_all_assets_from_fql(base: str, headers: dict[str, str], jsonz: dict, tim
     return assets
 
 
-# Takes a list of values and fql expression and returns aggregated list of all queries for it agaisnt given endpoint
+# Takes a list of values and fql expression and hits ASM API 1 at a time
+# returns aggregated list of all queries for it against given endpoint
 def aggregate_assets_from_values_list(values: list[str], headers: dict[str, str], base_url: str, filter_expression: str,
-    includes: str= (
-        "include_stale:true "
-        "include_hidden:true "
-        "include_missing:true "
-        "include_suppressed_by_age:true "
-        "include_deleted:true"
-    ),
-    limit: int = 100,
-    timeout: float = 60,
-) -> list[dict]:
+                                      evaluate_output: bool = True,
+                                      includes: str = (
+                                              "include_stale:true "
+                                              "include_hidden:true "
+                                              "include_missing:true "
+                                              "include_suppressed_by_age:true "
+                                              "include_deleted:true"
+                                      ),
+                                      limit: int = 100,
+                                      timeout: float = 60,
+                                      ) -> tuple[list[dict], list]:
     if "{value}" not in filter_expression:
         raise ValueError("filter_expression must contain '{value}'.")
     if type(limit) is not int or limit <= 0:
@@ -315,9 +342,9 @@ def aggregate_assets_from_values_list(values: list[str], headers: dict[str, str]
         max_attempts = 3
         for attempt in range(max_attempts):
             response = requests.post(base_url, headers=headers, json={"fql": fql, "page": page, "limit": limit})
-            #print("JSON: \n", response.json())
-            #print("TEXT: \n", response.text)
-            #print("URL: \n", response.url)
+            # print("JSON: \n", response.json())
+            # print("TEXT: \n", response.text)
+            # print("URL: \n", response.url)
             database_locked = (
                     response.status_code == 500
                     and "SQLITE_BUSY" in response.text
@@ -344,7 +371,9 @@ def aggregate_assets_from_values_list(values: list[str], headers: dict[str, str]
                     f"Page {page}: response must contain a 'data' list."
                 )
             return body
+
     for value in unique_values:
+        print(value)
         fql = (
             f"{filter_expression.replace('{value}', value)} "
             f"{includes}"
@@ -375,7 +404,7 @@ def aggregate_assets_from_values_list(values: list[str], headers: dict[str, str]
                 f"{len(query_results)} records; expected one."
             )
             for q in query_results:
-                print("TITLE:  ",q.get("title"))
+                print("TITLE:  ", q.get("title"))
                 print("UID:  ", q.get("uid"))
         aggregated.extend(query_results)
     input_titles = set(unique_values)
@@ -395,36 +424,150 @@ def aggregate_assets_from_values_list(values: list[str], headers: dict[str, str]
             f"{len(unique_values)} unique inputs versus "
             f"{len(aggregated)} output records."
         )
-    duplicates = {
-        title: count
-        for title, count in output_counts.items()
-        if count > 1
-    }
-    unexpected = set(output_counts) - input_titles
-    missing_titles = input_titles - set(output_counts)
-    if duplicates:
-        print("\nDuplicate output titles:")
-        for title, count in sorted(duplicates.items()):
-            print(f"  - {title!r}: {count} records ({count - 1} extra)")
-    if unexpected:
-        print("\nOutput titles not in the input list:")
-        for title in sorted(unexpected):
-            print(f"  - {title!r}: {output_counts[title]} records")
-    if missing_titles:
-        print("\nInput titles missing from the output:")
-        for title in sorted(missing_titles):
-            print(f"  - {title!r}")
-    for index, record in enumerate(aggregated):
-        if not isinstance(record.get("title"), str):
-            print(
-                f"WARNING: Output record at index {index} "
-                f"has a missing or non-string title: {record!r}"
-            )
-    return aggregated
+
+    if evaluate_output:
+        duplicates = {
+            title: count
+            for title, count in output_counts.items()
+            if count > 1
+        }
+        unexpected = set(output_counts) - input_titles
+        missing_titles = input_titles - set(output_counts)
+        if duplicates:
+            print("\nDuplicate output titles:")
+            for title, count in sorted(duplicates.items()):
+                print(f"  - {title!r}: {count} records ({count - 1} extra)")
+        if unexpected:
+            print("\nOutput titles not in the input list:")
+            for title in sorted(unexpected):
+                print(f"  - {title!r}: {output_counts[title]} records")
+        if missing_titles:
+            print("\nInput titles missing from the output:")
+            for title in sorted(missing_titles):
+                print(f"  - {title!r}")
+        for index, record in enumerate(aggregated):
+            if not isinstance(record.get("title"), str):
+                print(
+                    f"WARNING: Output record at index {index} "
+                    f"has a missing or non-string title: {record!r}"
+                )
+    return aggregated, missing
 
 
-def split_by_flags_active_other(all_groups: list[dict]) -> tuple[list[dict], list[dict]]:
-    return
+# Input list of ASM Group Names by "Title" field
+# Outputs aggregated list of all members from each nested class found
+def members_from_asm_groups(input_groups: list[dict]):
+    master_dict_all_data = {"group_nested_classes": set(),
+                            "group_members": [],
+                            "groups_no_members": {}
+                            }
+    groups_classes = master_dict_all_data["group_nested_classes"]
+    groups_members = master_dict_all_data["group_members"]
+    groups_no_members = master_dict_all_data["groups_no_members"]
+    member_counter = {}
+    master_discrep = {}
+    for grp in input_groups:
+        classes = grp["group"].get("nested_classes")
+        if classes is None:
+            print("Group:  ", grp.get("title"), "  Has no classes")
+        if classes is not None:
+            for n_class in classes:
+                m_keys = grp["group"][clean_class(n_class)].get("members")
+                member_counter[grp][clean_class(n_class)] = len(m_keys)
+                groups_members.append(m_keys)
+                if m_keys is None:
+                    groups_no_members[grp] = clean_class(n_class)
+        if member_counter.get(grp) is not None:
+            if len(member_counter[grp].get()) > 1:
+                master_discrep[grp] = find_class_discrepancies(member_counter[grp].get())
+
+    return master_dict_all_data, master_discrep
 
 
+# Input data of following format
+# data = {
+#     "Group A": {"class_1": 7, "class_2": 8},
+#     "Group B": {"class_1": 5, "class_2": 5},
+# }
+# Output (and print -option) discrepancies in class # values
+def find_class_discrepancies(data: dict[str, dict[str, int]], print_output: bool = True) -> dict:
+    discrepancies = {}
+    for title, classes in data.items():
+        counts = Counter(classes.values())
+        if len(counts) <= 1:
+            continue
+        highest_frequency = max(counts.values())
+        most_common = [
+            value
+            for value, frequency in counts.items()
+            if frequency == highest_frequency
+        ]
+        if len(most_common) > 1:
+            discrepancies[title] = {
+                "issue": "Class counts differ; no single most common count.",
+                "classes": dict(classes),
+            }
+            if print_output:
+                print(discrepancies.get(title))
+        else:
+            expected = most_common[0]
+            discrepancies[title] = {
+                "expected_count": expected,
+                "flagged_classes": {
+                    name: value
+                    for name, value in classes.items()
+                    if value != expected
+                },
+            }
+            if print_output:
+                print(discrepancies.get(title))
+    return discrepancies
 
+
+# Inputs dirty list of mixed type of member records
+# Outputs clean list of de-duplicated ASM User records
+def clean_asm_group_members(members: list, users_master: dict, user_classes: list):
+    all_users_uid: dict[str, list] = defaultdict(list)
+    member_strings = []
+    member_dicts = []
+    member_dict_to_id = {}
+    for m in members:
+        if isinstance(m, list) and m:
+            if all(isinstance(dict_m, dict) for dict_m in m):
+                member_dicts.extend(m)
+            elif all(isinstance(str_m, str) for str_m in m):
+                member_strings.extend(m)
+            else:
+                print("Mixed types")
+
+# turns Entra dicts into id for unique id
+    for m_d in member_dicts:
+        m_email = m_d.get("email")
+        m_id = m_d.get("id")
+        if m_id is not None:
+            if m_email is not None:
+                member_dict_to_id[m_id] = m_email
+            if m_email is None:
+                member_dict_to_id[m_id] = []
+        else:
+            print("Member has no id \n", m_id)
+
+    dn_str_keys = dict.fromkeys(member_strings)
+    print(f"Number of AD Users: {len(dn_str_keys)}")
+    print(f"Number of Entra Users: {len(member_dict_to_id)}")
+
+    for user in users_master:
+        if user.get("user") is not None:
+            for u_class in user_classes:
+                if user["user"][u_class] is not None:
+                    if user["user"][u_class].get("distinguished_name") is not None:
+                        if user["user"][u_class].get("distinguished_name") in dn_str_keys:
+                            all_users_uid[user.get("uid")].append(user["user"][u_class].get("distinguished_name"))
+                            dn_str_keys.pop(user["user"][u_class].get("distinguished_name"))
+
+                    if user["user"][u_class].get("id") is not None:
+                            if user["user"][u_class].get("id") in member_dict_to_id:
+                                all_users_uid[user.get("uid")].append(user["user"][u_class].get("id"))
+                                member_dict_to_id.pop(user["user"][u_class].get("id"))
+
+    return all_users_uid, dn_str_keys, member_dict_to_id
