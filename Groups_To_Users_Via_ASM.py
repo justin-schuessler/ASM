@@ -73,110 +73,77 @@ if __name__ == "__main__":
     print("User Count:  ", len(all_users_master))
     #all_users_master = USE.get_all_assets_from_fql(base=base, headers=headers, jsonz=jsonz)
     b_tier_0_groups = []
+    all_g_by_dn_keyed = {}
+    all_g_by_entra_id_keyed = {}
     print("All Group Length: ", len(All_Groups))
     for btg in All_Groups:
         if btg.get("group") is not None:
             if btg.get("title") in input_groups_dict:
                 b_tier_0_groups.append(btg)
                 input_groups_set.remove(btg.get("title"))
+            if btg["group"].get("microsoft_entra_group") is not None:
+                all_g_by_entra_id_keyed[btg["group"]["microsoft_entra_group"].get("id")] = btg
+            if btg["group"].get("active_directory_group") is not None:
+                all_g_by_dn_keyed[btg["group"]["active_directory_group"].get("distinguished_name")] = btg
 
     missing_groups = list(input_groups_set)
     print("B-Tier-0 Group Length: ", len(b_tier_0_groups))
 
-    """
-    all_users = []
-    all_users_uid: dict[str, list] = defaultdict(list)
-    other_classes = []
-    ad_users_master_list = []
-    ad_groups_no_members = []
-    en_ids_master_list = []
-    en_groups_no_members = []
-    groups_found_classes = []
-    for b_tier_0_g in b_tier_0_groups:
-        classes = b_tier_0_g["group"].get("nested_classes")
-        if classes is None:
-            print(b_tier_0_g.get("title"))
-        if classes is not None:
-            for n_class in classes:
-                if n_class == "Active-Directory-Group":
-                    groups_found_classes.append(n_class)
-                    ad_keys_list = b_tier_0_g["group"]["active_directory_group"].get("members")
-                    if ad_keys_list is not None:
-                        ad_users_master_list.extend(ad_keys_list)
-                    if ad_keys_list is None:
-                        ad_groups_no_members.append(b_tier_0_g)
-                elif n_class == "Microsoft-Entra-Group":
-                    groups_found_classes.append(n_class)
-                    en_dict_keys_list = b_tier_0_g["group"]["microsoft_entra_group"].get("members")
-                    en_keys_list = []
-                    if en_dict_keys_list is not None:
-                        for dict_key in en_dict_keys_list:
-                            en_keys_list.append(dict_key.get("id"))
-                        en_ids_master_list.extend(en_keys_list)
-                    if en_dict_keys_list is None:
-                        en_groups_no_members.append(b_tier_0_g)
-                else:
-                    groups_found_classes.append(n_class)
-                    print(f"Class Not Found: {n_class}   For Group: {b_tier_0_g}")
-                    other_classes.append(n_class)
-                    
-    ad_users_master_dict = dict.fromkeys(ad_users_master_list)
-    en_ids_master_dict = dict.fromkeys(en_ids_master_list)
-    """
     master_dict_all_data, master_discrep = USE.members_from_asm_groups(b_tier_0_groups)
     group_members = master_dict_all_data["group_members"]
-    all_users_uid, dn_str_keys, member_dict_to_id = USE.clean_asm_group_members(group_members, all_users_master)
+    all_users_uid, dn_str_keys, member_dict_to_id = USE.clean_asm_group_members(group_members, all_users_master, master_dict_all_data.get("user_nested_classes"))
+    c = 0
     while len(dn_str_keys) > 0 or len(member_dict_to_id) > 0:
-        continue
+        dn_str_keys_popper = dict(dn_str_keys)
+        member_dict_to_id_popper = dict(member_dict_to_id)
+        more_g = []
+        mini_data = {}
+        mini_discrep = {}
+        mini_dn_str_keys = {}
+        mini_member_dict_to_id = {}
+        mini_all_users_uid = {}
+        for dn in dn_str_keys:
+            if dn in all_g_by_dn_keyed:
+                more_g.append(all_g_by_dn_keyed.get(dn))
+                dn_str_keys_popper.pop(dn)
+        for en_id in member_dict_to_id:
+            if en_id in all_g_by_entra_id_keyed:
+                more_g.append(all_g_by_entra_id_keyed.get(en_id))
+                member_dict_to_id_popper.pop(en_id)
 
-    #print(f"Number of AD Users: {len(ad_users_master_dict)}")
-    #ad_filter_xpr = 'kind:User AND json("$.active_directory_user.distinguished_name") = "{value}"'
-    #ad_users, missing_ad_users = USE.aggregate_assets_from_values_list(values=list(ad_users_master_set), headers=headers, base_url=base, filter_expression=ad_filter_xpr, evaluate_output=False)
-
-    #print(f"Number of Entra Users: {len(en_ids_master_dict)}")
-    #en_filter_xpr = 'kind:User AND json("$.microsoft_entra_user.id") = "{value}"'
-    #ed_users, missing_en_users = USE.aggregate_assets_from_values_list(values=list(en_ids_master_set), headers=headers, base_url=base, filter_expression=en_filter_xpr, evaluate_output=False)
-    """ 
-   neat_classes = dict.fromkeys(groups_found_classes)
-    user_classes = []
-    for gr_class in neat_classes:
-        user_classes.append(USE.group_to_user(USE.clean_class(gr_class)))
-    """
-    """ 
-    all_user_by_dn_keyed = {}
-    all_user_by_entra_id_keyed = {}
-    pop_dn = 0
-    pop_en = 0
-    for user in all_users_master:
-        if user.get("user") is not None:
-            if user["user"].get("active_directory_user") is not None:
-                if user["user"]["active_directory_user"].get("distinguished_name") in ad_users_master_dict:
-                    all_users_uid[user.get("uid")].append(user["user"]["active_directory_user"].get("distinguished_name"))
-                    ad_users_master_dict.pop(user["user"]["active_directory_user"].get("distinguished_name"))
-                    pop_dn = pop_dn + 1
-                    all_user_by_dn_keyed[user["user"]["active_directory_user"].get("distinguished_name")] = user
-            if user["user"].get("microsoft_entra_user") is not None:
-                if user["user"]["microsoft_entra_user"].get("id") in en_ids_master_dict:
-                    all_users_uid[user.get("uid")].append(user["user"]["microsoft_entra_user"].get("id"))
-                    en_ids_master_dict.pop(user["user"]["microsoft_entra_user"].get("id"))
-                    pop_en = pop_en + 1
-                    all_user_by_entra_id_keyed[user["user"]["microsoft_entra_user"].get("id")] = user
-
-        else:
-            print(user.get("title"))
-    """
+        mini_data, mini_discrep = USE.members_from_asm_groups(more_g)
+        master_dict_all_data["group_nested_classes"] = master_dict_all_data["group_nested_classes"] | mini_data["group_nested_classes"]
+        master_dict_all_data["groups_no_members"] = master_dict_all_data["groups_no_members"] | mini_data["groups_no_members"]
+        master_dict_all_data["user_nested_classes"] = master_dict_all_data["user_nested_classes"] | mini_data["user_nested_classes"]
+        mini_all_users_uid, mini_dn_str_keys, mini_member_dict_to_id = USE.clean_asm_group_members(mini_data["group_members"], all_users_master, master_dict_all_data.get("user_nested_classes"))
+        master_dict_all_data["group_members"].extend(mini_data["group_members"])
+        dn_str_keys = dn_str_keys_popper | mini_dn_str_keys
+        member_dict_to_id = member_dict_to_id_popper | mini_member_dict_to_id
+        for record in mini_all_users_uid:
+            a_l = all_users_uid.get(record)
+            m_a_l = mini_all_users_uid.get(record)
+            all_users_uid[record].extend(mini_all_users_uid.get(record))
+            a_l_plus = set(all_users_uid.get(record))
+            all_users_uid[record] = list(a_l_plus)
+        c = c + 1
+        print(f"Loop Count: {c}")
+        if c > 5:
+            break
 
 
+    print("Group Missing :  ", missing_groups)
+    print("AD Users Missing count :  ", len(dn_str_keys))
+    print("Entra Users Missing count:  ", len(member_dict_to_id))
+    if len(dn_str_keys) > 0:
+        print("AD Users Missing:  ", dn_str_keys, "\n")
+    if len(member_dict_to_id) > 0:
+        print("Entra Users Missing:  ", member_dict_to_id, "\n")
+    print("Number of Users UID:  ", len(all_users_uid))
 
-    print("Group Missing:  ", missing_groups, "\n")
-    print("AD Users Missing:  ", list(dn_str_keys), "\n")
-    print("Entra Users Missing:  ", list(member_dict_to_id), "\n")
-    #print(f"Popped DN Count: {pop_dn}")
-    #print(f"Popped ENTRA Count: {pop_en}")
     #print("Groups Found Classes:  ", list(neat_classes), "\n")
     original_stdout = sys.stdout
     path = "C:/Users/justin.schuessler/Documents/API_Output/Sedara_ASM/"
-    Fullpath = path + "ASM_WH_ALL_B_Tier_0_Group_Users_v_2.json"
+    Fullpath = path + "ASM_WH_ALL_B_Tier_0_Group_Users_v_3.json"
     f = open(Fullpath, "w")
     sys.stdout = f
     output = json.dumps(all_users_uid, indent=4, )

@@ -454,10 +454,11 @@ def aggregate_assets_from_values_list(values: list[str], headers: dict[str, str]
     return aggregated, missing
 
 
-# Input list of ASM Group Names by "Title" field
+# Input list of ASM Group dicts
 # Outputs aggregated list of all members from each nested class found
 def members_from_asm_groups(input_groups: list[dict]):
     master_dict_all_data = {"group_nested_classes": set(),
+                            "user_nested_classes": set(),
                             "group_members": [],
                             "groups_no_members": {}
                             }
@@ -467,20 +468,28 @@ def members_from_asm_groups(input_groups: list[dict]):
     member_counter = {}
     master_discrep = {}
     for grp in input_groups:
+        g_title = grp.get("title")
         classes = grp["group"].get("nested_classes")
         if classes is None:
             print("Group:  ", grp.get("title"), "  Has no classes")
         if classes is not None:
             for n_class in classes:
                 m_keys = grp["group"][clean_class(n_class)].get("members")
-                member_counter[grp][clean_class(n_class)] = len(m_keys)
-                groups_members.append(m_keys)
+                if m_keys is not None:
+                    if member_counter.get(g_title) is None:
+                        member_counter[g_title] = {}
+                    if member_counter.get(g_title) is not None:
+                        member_counter[g_title][clean_class(n_class)] = len(m_keys)
+                    groups_members.append(m_keys)
                 if m_keys is None:
-                    groups_no_members[grp] = clean_class(n_class)
-        if member_counter.get(grp) is not None:
-            if len(member_counter[grp].get()) > 1:
-                master_discrep[grp] = find_class_discrepancies(member_counter[grp].get())
-
+                    groups_no_members[g_title] = clean_class(n_class)
+                groups_classes.add(n_class)
+        if member_counter.get(g_title) is not None:
+            if len(member_counter.get(g_title)) > 1:
+                master_discrep[g_title] = find_class_discrepancies(member_counter.get(g_title))
+    for n_g_c in master_dict_all_data.get("group_nested_classes"):
+        n_u_c = group_to_user(clean_class(n_g_c))
+        master_dict_all_data["user_nested_classes"].add(n_u_c)
     return master_dict_all_data, master_discrep
 
 
@@ -490,38 +499,35 @@ def members_from_asm_groups(input_groups: list[dict]):
 #     "Group B": {"class_1": 5, "class_2": 5},
 # }
 # Output (and print -option) discrepancies in class # values
-def find_class_discrepancies(data: dict[str, dict[str, int]], print_output: bool = True) -> dict:
-    discrepancies = {}
-    for title, classes in data.items():
-        counts = Counter(classes.values())
-        if len(counts) <= 1:
-            continue
-        highest_frequency = max(counts.values())
-        most_common = [
-            value
-            for value, frequency in counts.items()
-            if frequency == highest_frequency
-        ]
-        if len(most_common) > 1:
-            discrepancies[title] = {
-                "issue": "Class counts differ; no single most common count.",
-                "classes": dict(classes),
-            }
-            if print_output:
-                print(discrepancies.get(title))
-        else:
-            expected = most_common[0]
-            discrepancies[title] = {
-                "expected_count": expected,
-                "flagged_classes": {
-                    name: value
-                    for name, value in classes.items()
-                    if value != expected
-                },
-            }
-            if print_output:
-                print(discrepancies.get(title))
-    return discrepancies
+def find_class_discrepancies(classes: dict[str, int], print_output: bool = True) -> dict:
+    counts = Counter(classes.values())
+    if len(counts) <= 1:
+        return {}
+    highest_frequency = max(counts.values())
+    most_common = [
+        value
+        for value, frequency in counts.items()
+        if frequency == highest_frequency
+    ]
+    if len(most_common) > 1:
+        r = {"issue": "Class counts differ; no single most common count.",
+            "classes": dict(classes)}
+        if print_output:
+            print("print r: ", r)
+        return r
+
+    expected = most_common[0]
+    re = {
+        "expected_count": expected,
+        "flagged_classes": {
+            name: value
+            for name, value in classes.items()
+            if value != expected
+        },
+    }
+    if print_output:
+        print("print re:", re)
+    return re
 
 
 # Inputs dirty list of mixed type of member records
@@ -555,19 +561,53 @@ def clean_asm_group_members(members: list, users_master: dict, user_classes: lis
     dn_str_keys = dict.fromkeys(member_strings)
     print(f"Number of AD Users: {len(dn_str_keys)}")
     print(f"Number of Entra Users: {len(member_dict_to_id)}")
-
     for user in users_master:
         if user.get("user") is not None:
+            popped = 0
             for u_class in user_classes:
-                if user["user"][u_class] is not None:
+                if user["user"].get(u_class) is not None:
                     if user["user"][u_class].get("distinguished_name") is not None:
                         if user["user"][u_class].get("distinguished_name") in dn_str_keys:
                             all_users_uid[user.get("uid")].append(user["user"][u_class].get("distinguished_name"))
                             dn_str_keys.pop(user["user"][u_class].get("distinguished_name"))
+                            popped = popped + 1
 
                     if user["user"][u_class].get("id") is not None:
-                            if user["user"][u_class].get("id") in member_dict_to_id:
-                                all_users_uid[user.get("uid")].append(user["user"][u_class].get("id"))
-                                member_dict_to_id.pop(user["user"][u_class].get("id"))
+                        if user["user"][u_class].get("id") in member_dict_to_id:
+                            all_users_uid[user.get("uid")].append(user["user"][u_class].get("id"))
+                            member_dict_to_id.pop(user["user"][u_class].get("id"))
+                            popped = popped + 1
+
+                    if popped < 2:
+                        if user["user"][u_class].get("on_premises_distinguished_name") is not None:
+                            if user["user"][u_class].get("on_premises_distinguished_name") in dn_str_keys:
+                                all_users_uid[user.get("uid")].append(user["user"][u_class].get("on_premises_distinguished_name"))
+                                dn_str_keys.pop(user["user"][u_class].get("on_premises_distinguished_name"))
+                                popped = popped + 1
+
+                    if popped < 2:
+                        u_p_n = user["user"][u_class].get("user_principal_name")
+                        u_uc_emails = user["user"][u_class].get("email")
+                        if u_p_n is not None:
+                            for m_id in member_dict_to_id:
+                                m_pop = 0
+                                for mbr_dict_id_value_e in member_dict_to_id.get(m_id):
+                                    if u_p_n == mbr_dict_id_value_e:
+                                        all_users_uid[user.get("uid")].append(u_p_n)
+                                        member_dict_to_id.pop(m_id)
+                                        popped = popped + 1
+                                        m_pop = m_pop + 1
+
+                                if u_uc_emails is not None:
+                                    for u_e in u_uc_emails:
+                                        if u_e == member_dict_to_id.get(m_id):
+                                            all_users_uid[user.get("uid")].append(u_p_n)
+                                            member_dict_to_id.pop(m_id)
+                                            popped = popped + 1
+                                            m_pop = m_pop + 1
+                                if m_pop > 0:
+                                    break
 
     return all_users_uid, dn_str_keys, member_dict_to_id
+
+
