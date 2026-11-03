@@ -459,6 +459,7 @@ def aggregate_assets_from_values_list(values: list[str], headers: dict[str, str]
 def members_from_asm_groups(input_groups: list[dict]):
     master_dict_all_data = {"group_nested_classes": set(),
                             "user_nested_classes": set(),
+                            "group_emails": {},
                             "group_members": [],
                             "groups_no_members": {}
                             }
@@ -470,10 +471,17 @@ def members_from_asm_groups(input_groups: list[dict]):
     for grp in input_groups:
         g_title = grp.get("title")
         classes = grp["group"].get("nested_classes")
+        if master_dict_all_data["group_emails"].get(g_title) is None:
+            master_dict_all_data["group_emails"][g_title] = set()
         if classes is None:
             print("Group:  ", grp.get("title"), "  Has no classes")
         if classes is not None:
             for n_class in classes:
+                if master_dict_all_data["group_emails"].get(g_title) is not None:
+                    grp_c_em = grp["group"][clean_class(n_class)].get("email")
+                    if grp_c_em is not None:
+                        for g_em in grp_c_em:
+                            master_dict_all_data["group_emails"][g_title].add(g_em)
                 m_keys = grp["group"][clean_class(n_class)].get("members")
                 if m_keys is not None:
                     if member_counter.get(g_title) is None:

@@ -90,8 +90,9 @@ if __name__ == "__main__":
     print("B-Tier-0 Group Length: ", len(b_tier_0_groups))
 
     master_dict_all_data, master_discrep = USE.members_from_asm_groups(b_tier_0_groups)
-    group_members = master_dict_all_data["group_members"]
+    group_members = master_dict_all_data.get("group_members")
     all_users_uid, dn_str_keys, member_dict_to_id = USE.clean_asm_group_members(group_members, all_users_master, master_dict_all_data.get("user_nested_classes"))
+    all_group_emails_dict = master_dict_all_data.get("group_emails")
     c = 0
     while len(dn_str_keys) > 0 or len(member_dict_to_id) > 0:
         dn_str_keys_popper = dict(dn_str_keys)
@@ -102,6 +103,7 @@ if __name__ == "__main__":
         mini_dn_str_keys = {}
         mini_member_dict_to_id = {}
         mini_all_users_uid = {}
+        mini_grp_email = {}
         for dn in dn_str_keys:
             if dn in all_g_by_dn_keyed:
                 more_g.append(all_g_by_dn_keyed.get(dn))
@@ -115,6 +117,13 @@ if __name__ == "__main__":
         master_dict_all_data["group_nested_classes"] = master_dict_all_data["group_nested_classes"] | mini_data["group_nested_classes"]
         master_dict_all_data["groups_no_members"] = master_dict_all_data["groups_no_members"] | mini_data["groups_no_members"]
         master_dict_all_data["user_nested_classes"] = master_dict_all_data["user_nested_classes"] | mini_data["user_nested_classes"]
+        mini_g_emails = mini_data.get("group_emails")
+        for grp_t in mini_g_emails.keys():
+            if all_group_emails_dict.get(grp_t) is not None:
+                all_group_emails_dict[grp_t] = all_group_emails_dict.get(grp_t) | mini_g_emails.get(grp_t)
+            if all_group_emails_dict.get(grp_t) is None:
+                all_group_emails_dict[grp_t] = mini_g_emails.get(grp_t)
+
         mini_all_users_uid, mini_dn_str_keys, mini_member_dict_to_id = USE.clean_asm_group_members(mini_data["group_members"], all_users_master, master_dict_all_data.get("user_nested_classes"))
         master_dict_all_data["group_members"].extend(mini_data["group_members"])
         dn_str_keys = dn_str_keys_popper | mini_dn_str_keys
@@ -130,8 +139,8 @@ if __name__ == "__main__":
         if c > 5:
             break
 
-
-    print("Group Missing :  ", missing_groups)
+    if len(missing_groups) > 0:
+        print("Group Missing :  ", missing_groups)
     print("AD Users Missing count :  ", len(dn_str_keys))
     print("Entra Users Missing count:  ", len(member_dict_to_id))
     if len(dn_str_keys) > 0:
@@ -139,6 +148,17 @@ if __name__ == "__main__":
     if len(member_dict_to_id) > 0:
         print("Entra Users Missing:  ", member_dict_to_id, "\n")
     print("Number of Users UID:  ", len(all_users_uid))
+    if len(master_dict_all_data.get("groups_no_members")) > 0:
+        print("Groups With No Members:  ", master_dict_all_data.get("groups_no_members"))
+    print("Number of groups in Emails List:  ", len(all_group_emails_dict))
+
+    for e_set in all_group_emails_dict.keys():
+        if all_group_emails_dict.get(e_set) is not None:
+            all_group_emails_dict[e_set] = list(all_group_emails_dict.get(e_set))
+    output_data = {
+        "all_users": all_users_uid,
+        "all_groups_emails": all_group_emails_dict
+    }
 
     #print("Groups Found Classes:  ", list(neat_classes), "\n")
     original_stdout = sys.stdout
@@ -146,7 +166,7 @@ if __name__ == "__main__":
     Fullpath = path + "ASM_WH_ALL_B_Tier_0_Group_Users_v_3.json"
     f = open(Fullpath, "w")
     sys.stdout = f
-    output = json.dumps(all_users_uid, indent=4, )
+    output = json.dumps(output_data, indent=4, )
     print(output)
     f.close()
     sys.stdout = original_stdout
