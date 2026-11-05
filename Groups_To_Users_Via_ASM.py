@@ -41,7 +41,7 @@ if __name__ == "__main__":
     business_tier_0_groups_path = "C:/Users/justin.schuessler/Documents/Sedara_ASM/Input_Static_Data/WH_business_tier_0_groups.json"
     #access_key = USE.get_asm_platform_api_access_key()
 
-    BASE_URL = "https://platform.sedaraapis.com/asm/"
+    #BASE_URL = "https://platform.sedaraapis.com/asm/"
     #headers = {"Authorization":  f"Bearer {access_key}",
     #           "Content-Type": "application/json"}
     input_groups = input_group_data()
@@ -65,13 +65,13 @@ if __name__ == "__main__":
 
 
     #base = (f"{BASE_URL}" + tenant_id + "/assets")
-    #All_Groups = USE.get_all_assets_from_fql(base=base, headers=headers, jsonz=jsonz)
+    #All_Groups = USE.get_all_assets_from_fql(headers=headers, tenant_id=tenant_id, jsonz=jsonz)
     All_Groups = input_all_groups()
     fql_2 = 'kind:User include_stale:true include_hidden:true include_missing:true include_suppressed_by_age:true include_deleted:true'
     #jsonz = {"fql": fql_2, "page": 1, "limit": 1000}
     all_users_master = input_user_data()
     print("User Count:  ", len(all_users_master))
-    #all_users_master = USE.get_all_assets_from_fql(base=base, headers=headers, jsonz=jsonz)
+    #all_users_master = USE.get_all_assets_from_fql(headers=headers, tenant_id=tenant_id, jsonz=jsonz)
     b_tier_0_groups = []
     all_g_by_dn_keyed = {}
     all_g_by_entra_id_keyed = {}

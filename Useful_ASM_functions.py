@@ -17,6 +17,22 @@ asm_out_path = "C:/Users/justin.schuessler/Documents/API_Output/Sedara_ASM/"
 asm_report_path = "A:/Cyber_Operations/ASM_Reports/"
 
 
+def get_base_url():
+    return Base_URL
+
+
+def get_asm_out_path():
+    return asm_out_path
+
+
+def get_asm_report_out_path():
+    return asm_report_path
+
+
+def get_asm_platform_api_access_key():
+    return get_1password_field.get_1password_field("Sedara Platform ASM API", "Access key", "API")
+
+
 # changes nested classes string to dict key string
 def clean_class(nested):
     clean = nested.lower().replace("-", "_")
@@ -26,6 +42,14 @@ def clean_class(nested):
 # changes _group at end of classes to _user
 def group_to_user(value: str) -> str:
     return value[:-6] + "_user" if value.endswith("_group") else value
+
+
+def get_all_user_fql():
+    return 'kind:User include_stale:true include_hidden:true include_missing:true include_suppressed_by_age:true include_deleted:true'
+
+
+def get_all_group_fql():
+    return 'kind:Group include_stale:true include_hidden:true include_missing:true include_suppressed_by_age:true include_deleted:true'
 
 
 def list_asm_integrations(headers, tenant_id, params=None):
@@ -211,27 +235,11 @@ def out_to_excel(data, xl_save_path):
     print("File:  ", filename, "  Saved To Directory:  ", directory)
 
 
-def get_base_url():
-    return Base_URL
-
-
-def get_asm_out_path():
-    return asm_out_path
-
-
-def get_asm_report_out_path():
-    return asm_report_path
-
-
-def get_asm_platform_api_access_key():
-    return get_1password_field.get_1password_field("Sedara Platform ASM API", "Access key", "API")
-
-
-def get_software_vuln_data(tenant, headers, params=None):
+def get_software_vuln_data(headers: dict[str, str], tenant_id: str, params=None):
     if params is None:
         params = {"include_cves": "true"}
 
-    response = requests.get(f"{Base_URL}" + f"asm/{tenant}/tech-stack", headers=headers, params=params)
+    response = requests.get(f"{Base_URL}" + f"asm/{tenant_id}/tech-stack", headers=headers, params=params)
     print(response.status_code)
     print(response.headers)
     # print(response.text)
@@ -240,12 +248,23 @@ def get_software_vuln_data(tenant, headers, params=None):
     return response.json()
 
 
-def get_all_assets_from_fql(base: str, headers: dict[str, str],
+def get_all_nested_classes(data: list[dict]) -> list:
+    nested = set()
+    kind_list = ["user", "device", "group", "object-store"]
+    for d in data:
+        for k in kind_list:
+            if d.get(k) is not None:
+                nested = nested | set(d[k].get("nested_classes"))
+    return list(nested)
+
+
+def get_all_assets_from_fql(headers: dict[str, str], tenant_id: str,
                             jsonz: dict, timeout: float = 60, ) -> list[dict]:
     """Fetch and aggregate every page of assets."""
     """Used to Return a Large list of assets with multiple Pages"""
     payload = {**jsonz, "page": 0}
     limit = payload.setdefault("limit", 1000)
+    base = "https://platform.sedaraapis.com/asm/" + tenant_id + "/assets"
 
     if type(limit) is not int or limit <= 0:
         raise ValueError("'limit' must be a positive integer.")
@@ -317,7 +336,7 @@ def get_all_assets_from_fql(base: str, headers: dict[str, str],
 
 # Takes a list of values and fql expression and hits ASM API 1 at a time
 # returns aggregated list of all queries for it against given endpoint
-def aggregate_assets_from_values_list(values: list[str], headers: dict[str, str], base_url: str, filter_expression: str,
+def aggregate_assets_from_values_list(values: list[str], headers: dict[str, str], tenant_id: str, filter_expression: str,
                                       evaluate_output: bool = True,
                                       includes: str = (
                                               "include_stale:true "
@@ -329,6 +348,7 @@ def aggregate_assets_from_values_list(values: list[str], headers: dict[str, str]
                                       limit: int = 100,
                                       timeout: float = 60,
                                       ) -> tuple[list[dict], list]:
+    base = "https://platform.sedaraapis.com/asm/" + tenant_id + "/assets"
     if "{value}" not in filter_expression:
         raise ValueError("filter_expression must contain '{value}'.")
     if type(limit) is not int or limit <= 0:
@@ -341,7 +361,7 @@ def aggregate_assets_from_values_list(values: list[str], headers: dict[str, str]
     def fetch_page(fql: str, page: int) -> dict:
         max_attempts = 3
         for attempt in range(max_attempts):
-            response = requests.post(base_url, headers=headers, json={"fql": fql, "page": page, "limit": limit})
+            response = requests.post(base, headers=headers, json={"fql": fql, "page": page, "limit": limit})
             # print("JSON: \n", response.json())
             # print("TEXT: \n", response.text)
             # print("URL: \n", response.url)

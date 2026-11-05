@@ -1,20 +1,14 @@
-import sys
-import json
 import csv
 import io
-import datetime
-import requests
-import time
-from requests.auth import HTTPBasicAuth
-import subprocess
-import get_1password_field
-import os
-from openpyxl import Workbook
-from collections import Counter
-from collections import defaultdict
-import Useful_ASM_functions as USE
 
 
+def clean_class(nested):
+    clean = nested.lower().replace("-", "_")
+    return clean
+
+
+# returns default user lookup table structure
+# can also be modified to increase the counts of some fields
 def get_asm_user_default_lookup_table_structure(counts=None) -> tuple[list, dict]:
     fields = []
     if counts is None:
@@ -59,16 +53,8 @@ def get_asm_user_default_lookup_table_structure(counts=None) -> tuple[list, dict
     return fields, counts
 
 
-def get_csv_format_of_default_lookup_table_structure(counts=None):
-    fields, counts = get_asm_user_default_lookup_table_structure(counts=counts)
-    output = io.StringIO()
-    writer = csv.writer(output, lineterminator="\n")
-    writer.writerow(field["fieldName"] for field in fields)
-    return output.getvalue(), counts
-
-
-def asm_users_to_sumo_lookup_csv(all_users: dict, user_classes: list) -> str:
-    first_line, counts = get_csv_format_of_default_lookup_table_structure()
+def asm_users_to_sumo_lookup_csv(all_users: dict):
+    fields, counts = get_asm_user_default_lookup_table_structure()
     upn_count = counts.get("upn_count")
     sam_count = counts.get("sam_count")
     email_count = counts.get("email_count")
@@ -87,7 +73,8 @@ def asm_users_to_sumo_lookup_csv(all_users: dict, user_classes: list) -> str:
         title = user.get("title")
         emails = set()
         if user.get("user") is not None:
-            for u_c in USE.clean_class(user.get("nested_classes")):
+            for d_u_c in user["user"].get("nested_classes"):
+                u_c = clean_class(d_u_c)
                 class_emails = []
                 for item in get_list:
                     value = user["user"][u_c].get(item)
@@ -111,21 +98,55 @@ def asm_users_to_sumo_lookup_csv(all_users: dict, user_classes: list) -> str:
                 if len(sam_accounts) > found_sam_count:
                     found_sam_count = len(sam_accounts)
             if len(user_principal_name) > upn_count:
-                print(f"UPN Account Issue:  {title}  |  Has UPN Count: {len(sam_accounts)}")
+                print(f"UPN Account Issue:  {title}  |  Has UPN Count: {len(user_principal_name)}")
                 if len(user_principal_name) > found_upn_count:
                     found_upn_count = len(user_principal_name)
             user_row = []
-            for upn_a in list(user_principal_name):
-                user_row.append(upn_a)
-            for sam_a in list(sam_accounts):
-                user_row.append(sam_a)
+            user_row.append(list(user_principal_name))
+            user_row.append(list(sam_accounts))
             user_row.append(title)
-            for em_a in list(emails):
-                user_row.append(em_a)
+            user_row.append(list(emails))
+
             rows.append(user_row)
 
     new_counts = {"upn_count": found_upn_count, "sam_count": found_sam_count, "email_count": found_e_count}
-    first_line, counts = get_csv_format_of_default_lookup_table_structure(counts=new_counts)
-    writer.writerow(first_line)
-    writer.writerows(rows)
-    return output.getvalue()
+    fields, counts = get_asm_user_default_lookup_table_structure(counts=new_counts)
+    writer.writerow(field["fieldName"] for field in fields)
+    out_rows = []
+    for r in rows:
+        print("Dirty:  ",r)
+        upn_out = r[0]
+        sams_out = r[1]
+        title_out = r[2]
+        emails_out = r[3]
+        clean_user_row = []
+        upn_c = 0
+        sams_c = 0
+        emails_c = 0
+        for o_upn in range(counts.get("upn_count")):
+            if len(upn_out) > upn_c:
+                clean_user_row.append(upn_out[o_upn])
+            else:
+                clean_user_row.append("")
+            upn_c = upn_c + 1
+
+        for o_sams in range(counts.get("sam_count")):
+            if len(sams_out) > sams_c:
+                clean_user_row.append(sams_out[o_sams])
+            else:
+                clean_user_row.append("")
+            sams_c = sams_c + 1
+
+        clean_user_row.append(title_out)
+
+        for o_emails in range(counts.get("email_count")):
+            if len(emails_out) > emails_c:
+                clean_user_row.append(emails_out[o_emails])
+            else:
+                clean_user_row.append("")
+            emails_c = emails_c + 1
+        print("Cleaned: ",clean_user_row)
+        out_rows.append(clean_user_row)
+
+    writer.writerows(out_rows)
+    return output.getvalue(), fields, counts

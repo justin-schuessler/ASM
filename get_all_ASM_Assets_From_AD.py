@@ -117,15 +117,15 @@ if __name__ == "__main__":
     else:
         # tenant_id = get_1password_field.get_1password_field("Sedara Platform ASM API", "sedara tenant id", "API")
 
-        # west herr
-        tenant_id = "ca25595c-c6f0-4c58-9e9b-c83325eb9cc6"
+        # Taylor Devices
+        tenant_id = "83b83e29-f7ed-4588-a271-a8604522160c"
         access_key = get_1password_field.get_1password_field("Sedara Platform ASM API", "Access key", "API")
         headers = {"Authorization":  f"Bearer {access_key}", "Content-Type": "application/json"}
         kind = '(class:Active-Directory-Computer OR class:Active-Directory-Group OR class:Active-Directory-User)include_stale:true include_hidden:true include_missing:true include_suppressed_by_age:true include_deleted:true'
         assets = get_all_assets(BASE_URL, tenant_id, headers, kind)
 
-    fullpath_ou_json = path + "ASM_West_Herr_OU_Structure_v2.json"
-    fullpath_ou_csv = path + "ASM_West_Herr_OU_Structure_v2.csv"
+    fullpath_ou_json = path + "ASM_Taylor_Devices_OU_Structure_v2.json"
+    fullpath_ou_csv = path + "ASM_Taylor_Devices_OU_Structure_v2.csv"
     tree, rows = export_ou_structure(
             assets,
             json_output_path=fullpath_ou_json,
@@ -133,6 +133,6 @@ if __name__ == "__main__":
         )
 
     if not loaded_from_file:
-        Fullpath_assets = path + "ASM_west_herr_AD_all_Classes_1.json"
+        Fullpath_assets = path + "ASM_Taylor_Devices_AD_all_Classes_1.json"
         save_assets(assets, Fullpath_assets)
         print(f"Saved {len(assets)}  ", Fullpath_assets)
